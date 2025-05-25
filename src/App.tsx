@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useMemo } from 'react'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
 
@@ -11,10 +11,35 @@ interface Message {
   attachmentPath?: string
 }
 
+// Función para generar un color aleatorio en formato HSL
+function generateRandomColor(): string {
+  // Generar un tono aleatorio (0-360)
+  const hue = Math.floor(Math.random() * 360)
+  // Usar saturación y luminosidad fijas para colores consistentes
+  const saturation = 70
+  const lightness = 60
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
 function App() {
   const [messages, setMessages] = useState<Message[]>([])
   const [chatName, setChatName] = useState<string>('')
+  const [selectedUser, setSelectedUser] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Obtener lista única de usuarios y asignar colores aleatorios
+  const userColors = useMemo(() => {
+    const users = new Set<string>()
+    messages.forEach(msg => {
+      if (msg.type !== 'system') {
+        users.add(msg.sender)
+      }
+    })
+    return Array.from(users).reduce((acc, user) => {
+      acc[user] = generateRandomColor()
+      return acc
+    }, {} as Record<string, string>)
+  }, [messages])
 
   const handleFolderUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
@@ -32,6 +57,7 @@ function App() {
         mediaMap.set(file.name, objectUrl)
       }
     }
+
     // Find the chat file
     let chatFile: File | null = null
     for (let i = 0; i < files.length; i++) {
@@ -103,7 +129,6 @@ function App() {
         parsedMessages.push(message)
       }
     }
-    console.log(parsedMessages)
 
     setMessages(parsedMessages)
   }
@@ -173,71 +198,103 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
-      <div className="container mx-auto p-4">
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
-          {/* Header */}
-          <div className="bg-green-600 text-white p-4">
-            <h1 className="text-xl font-semibold">
-              {chatName || 'WhatsApp Chat Viewer'}
-            </h1>
-          </div>
+    <div className="min-h-screen flex items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white rounded-lg shadow-lg overflow-hidden h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="bg-green-600 text-white p-4">
+          <h1 className="text-xl font-semibold">
+            {chatName || 'WhatsApp Chat Viewer'}
+          </h1>
+        </div>
 
-          {/* File Upload */}
-          <div className="p-4 border-b">
-            <input
-              ref={fileInputRef}
-              type="file"
-              webkitdirectory=""
-              mozdirectory=""
-              odirectory=""
-              directory=""
-              multiple
-              onChange={handleFolderUpload}
-              className="block w-full text-sm text-gray-500
-                file:mr-4 file:py-2 file:px-4
-                file:rounded-full file:border-0
-                file:text-sm file:font-semibold
-                file:bg-green-50 file:text-green-700
-                hover:file:bg-green-100"
-            />
-            <p className="mt-2 text-sm text-gray-500">
-              Selecciona la carpeta completa exportada de WhatsApp
-            </p>
-          </div>
-
-          {/* Messages */}
-          <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
-            {messages.map((message, index) => (
+        {/* User Selection */}
+        <div className="p-4 border-b bg-gray-50">
+          <div className="flex items-center space-x-4">
+            <label className="text-sm font-medium text-gray-700">Selecciona tu usuario:</label>
+            <select
+              value={selectedUser}
+              onChange={(e) => setSelectedUser(e.target.value)}
+              className="rounded-md border-gray-300 shadow-sm focus:border-green-500 focus:ring-green-500"
+            >
+              <option value="">Selecciona un usuario</option>
+              {Object.keys(userColors).map((user) => (
+                <option key={user} value={user}>
+                  {user}
+                </option>
+              ))}
+            </select>
+            {selectedUser && (
               <div
-                key={index}
-                className={`flex ${
-                  message.type === 'system' 
-                    ? 'justify-center' 
-                    : message.sender === 'Tú' 
-                      ? 'justify-end' 
-                      : 'justify-start'
+                className="w-4 h-4 rounded-full"
+                style={{ backgroundColor: userColors[selectedUser] }}
+              />
+            )}
+          </div>
+        </div>
+
+        {/* File Upload */}
+        <div className="p-4 border-b">
+          <input
+            ref={fileInputRef}
+            type="file"
+            // @ts-ignore - Ignore directory input attributes not in HTMLInputElement type
+            webkitdirectory="" 
+            mozdirectory=""
+            odirectory=""
+            directory=""
+            multiple
+            onChange={handleFolderUpload}
+            className="block w-full text-sm text-gray-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-full file:border-0
+              file:text-sm file:font-semibold
+              file:bg-green-50 file:text-green-700
+              hover:file:bg-green-100"
+          />
+          <p className="mt-2 text-sm text-gray-500">
+            Selecciona la carpeta completa exportada de WhatsApp
+          </p>
+        </div>
+
+        {/* Messages */}
+        <div className="flex-1 p-4 space-y-4 overflow-y-auto">
+          {messages.map((message, index) => (
+            <div
+              key={index}
+              className={`flex ${
+                message.type === 'system' 
+                  ? 'justify-center' 
+                  : message.sender === selectedUser
+                    ? 'justify-end' 
+                    : 'justify-start'
+              }`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg p-3 ${
+                  message.type === 'system'
+                    ? 'bg-gray-50 text-gray-500'
+                    : message.sender === selectedUser
+                      ? 'bg-green-100 text-gray-800'
+                      : 'bg-gray-100 text-gray-800'
                 }`}
               >
-                <div
-                  className={`max-w-[70%] rounded-lg p-3 ${
-                    message.type === 'system'
-                      ? 'bg-gray-50 text-gray-500'
-                      : message.sender === 'Tú'
-                        ? 'bg-green-100 text-gray-800'
-                        : 'bg-gray-100 text-gray-800'
-                  }`}
-                >
-                  {message.type !== 'system' && (
-                    <div className="text-xs text-gray-500 mb-1">
-                      {message.sender} • {format(new Date(`${message.date.split('/')[2]}-${message.date.split('/')[1]}-${message.date.split('/')[0]} ${message.time}`), 'PPp', { locale: es })}
-                    </div>
-                  )}
-                  {renderMessageContent(message)}
-                </div>
+                {message.type !== 'system' && (
+                  <div className="text-xs mb-1">
+                    <span 
+                      className="font-medium"
+                      style={{ color: userColors[message.sender] }}
+                    >
+                      {message.sender}
+                    </span>
+                    <span className="text-gray-500 ml-2">
+                      {format(new Date(`${message.date.split('/')[2]}-${message.date.split('/')[1]}-${message.date.split('/')[0]} ${message.time}`), 'PPp', { locale: es })}
+                    </span>
+                  </div>
+                )}
+                {renderMessageContent(message)}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
